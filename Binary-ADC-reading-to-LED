@@ -1,0 +1,218 @@
+#!/usr/bin/python3
+# Date Created : 03.18.2019 
+
+import smbus 
+import RPi.GPIO as GPIO 
+import time
+
+GPIO.setmode(GPIO.BOARD)
+
+GPIO.setup(13, GPIO.OUT)
+GPIO.setup(15, GPIO.OUT)
+GPIO.setup(16, GPIO.OUT)
+GPIO.setup(18, GPIO.OUT)
+GPIO.setup(22, GPIO.OUT)
+
+
+DEVICE_ADDRESS = 0x48 # The address of the i2c device in hex without the r/w bit 
+CONFIG_REGISTER = 0x01 
+CONVERSION_REGISTER = 0x00 
+
+bus = smbus.SMBus(1) # connects to i2C channel 1 and GPIO i2C pins
+
+# configure_adc 
+# No return
+# Param: (bus) - connection to i2C channel and GPIO i2C pins (Device) 
+
+def configure_adc(bus):
+  
+  config_bytes = [ 0xC0, 0x83 ] # MSB, LSB in hex (0xC0's 0 expands the range of the voltage)
+  bus.write_i2c_block_data(DEVICE_ADDRESS, CONFIG_REGISTER, config_bytes)
+  
+  
+# get_raw_adc_reading(my_bus) - task 10 - sets address pointer register (DEVICE_ADDRESS)
+# Returns: raw ADC reading 
+# Param: (my_bus) - smbus i2c object recieving data
+
+def get_raw_adc_reading(bus):
+  
+  raw_reading = bus.read_i2c_block_data(DEVICE_ADDRESS, CONVERSION_REGISTER)
+  MSB = raw_reading[0] << 8 
+  RAW = MSB + raw_reading[1]
+
+#   print("LSB is {raw_reading[1]}")
+  
+#   print("LSB in Hex: {str(hex(raw_reading[1])}))
+#   print("LSB in Binary: {str(bin(raw_reading[1]))}) 
+  
+#   print("MSB is {MSB}")
+
+#   print("MSB in hex:{str(hex(MSB))})
+#   print("MSB in binary {str(bin(MSB))})
+        
+#   print(" MSB + LSB are {RAW} )
+
+#   print("RAW hex: {str(hex(RAW))})
+#   print("RAW binary {str(bin(RAW))})
+  
+  return RAW
+  
+        
+def convert_raw_reading(RAW):
+
+  voltage = 0.0001875 * RAW
+  
+  print( "Voltage reading is... " )
+  print( str(voltage) + "... \n")
+
+  return voltage
+        
+  
+def convert_voltage_to_temp(voltage, resistor):
+
+  if ( voltage <= 0.75 ):
+    x = 0
+   # print("voltage is zero (Thermistor's resistance is being read weird), maybe check your wires and try again...")
+  
+  else: 
+
+    input_volt = 5
+    inp_and_resistor = resistor * input_volt
+        
+    therm_resistance = inp_and_resistor - resistor * voltage 
+    therm_res = therm_resistance / voltage 
+        
+   # print("Your thermistor's resistance is..." + str(therm_res))
+                
+    first_temp = 6925 * therm_res ** - 0.622 
+    fahren_temp = first_temp * 1.8 + 32
+
+    print("Temperature is.." + str(fahren_temp) + "º fahrenheit") 
+    
+    return fahren_temp
+    
+    
+def LED_control(temperature):
+  while True: 
+ 
+    if(temperature >= float(20)) and (temperature <= float(55)):
+ 
+     GPIO.output(13, GPIO.HIGH) 
+     time.sleep (0.5)
+     GPIO.output(13, LOW)
+     GPIO.sleep(0.5)
+
+     GPIO.output(15, GPIO.LOW)
+     GPIO.output(16, GPIO.LOW)
+     GPIO.output(18, GPIO.LOW)
+     GPIO.output(22, GPIO.LOW)
+
+    elif(temperature >= float(56)) and (temperature <= float(70)):
+ 
+     GPIO.output(15, GPIO.HIGH)
+     time.sleep(0.5)
+     GPIO.output(15, GPIO.LOW)
+     time.sleep(0.5)
+
+     GPIO.output(13, GPIO.LOW)
+     GPIO.output(16, GPIO.LOW)
+     GPIO.output(18, GPIO.LOW)
+     GPIO.output(22, GPIO.LOW)
+
+    elif(temperature >= float(71)) and (temperature <= float(80)):
+ 
+     GPIO.output(16, GPIO.HIGH)
+     time.sleep(0.5)
+     GPIO.output(16, GPIO.LOW)
+     time.sleep(0.5)
+
+     GPIO.output(13, GPIO.LOW)
+     GPIO.output(15, GPIO.LOW)
+     GPIO.output(18, GPIO.LOW)
+     GPIO.output(22, GPIO.LOW)
+
+    elif(temperature >= float(81)) and (temperature <= float(90)):
+ 
+     GPIO.output(18, GPIO.HIGH)
+     time.sleep(0.5)
+     GPIO.output(18, GPIO.LOW)
+     time.sleep(0.5)
+
+     GPIO.output(13, GPIO.LOW)
+     GPIO.output(15, GPIO.LOW)
+     GPIO.output(16, GPIO.LOW)
+     GPIO.output(22, GPIO.LOW)
+
+    elif(temperature >= float(91)) and (temperature <= float(100)):
+
+     GPIO.output(22, GPIO.HIGH)
+     time.sleep(0.5)
+     GPIO.output(22, GPIO.LOW)
+     time.sleep(0.5)
+
+     GPIO.output(13, GPIO.LOW)
+     GPIO.output(15, GPIO.LOW)
+     GPIO.output(16, GPIO.LOW)
+     GPIO.output(18, GPIO.LOW)
+
+    else: 
+ 
+     GPIO.output(13, GPIO.LOW) 
+     GPIO.output(15, GPIO.LOW) 
+     GPIO.output(16, GPIO.LOW) 
+     GPIO.output(18, GPIO.LOW)
+     GPIO.output(22, GPIO.LOW)
+  
+  
+def LED_temp_to_blink(temperature): 
+  
+  binary_temp = bin(temperature)[2:]
+  
+  for char in binary_temp:
+  
+    if int(char) == 0:
+    
+      GPIO.output(16, GPIO.HIGH)
+      time.sleep(3.0)
+      GPIO.output(16, GPIO.LOW)
+      time.sleep(1.0)
+  
+    elif int(char) == 1:
+    
+      GPIO.output(16, GPIO.LOW)
+      time.sleep(3.0)
+      GPIO.output(16, GPIO.HIGH)
+      time.sleep(1.0)
+      
+    else: 
+      print("...")
+ 
+
+configure_adc(bus) 
+
+while True:
+  
+  adc_reading = get_raw_adc_reading(bus)
+  
+  if bin(adc_reading) >= bin(32768):
+    adc_reading = bin(0000000000000000)
+
+  voltage_reading = convert_raw_reading(adc_reading)
+
+  temperature_read = convert_voltage_to_temp(voltage_reading, 10000)
+  
+#   int_temp = int(temperature_read)  
+#   LED_temp_to_blink(int_temp)
+#   LED_control(temperature_read)
+#   print(temperature_read)
+  
+
+        
+#else: 
+        
+ # print(adc_reading)
+
+  int_temp = int(temperature_read)  
+  LED_temp_to_blink(int_temp)
+  LED_control(temperature_read)
+  
